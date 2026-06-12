@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>キッズ花花 料金計算システム</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .wrapper { display: flex; gap: 20px; max-width: 1250px; margin: auto; }
+        .input-panel { flex: 1; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-top: 6px solid #d63384; }
+        .preview-panel { width: 480px; background: #999; padding: 20px; border-radius: 12px; position: sticky; top: 20px; height: fit-content; }
+        h1 { font-size: 1.3rem; color: #d63384; margin-bottom: 20px; text-align: center; border-bottom: 2px solid #fce7f3; padding-bottom: 10px; }
+        .section-title { font-weight: bold; font-size: 0.9rem; margin: 15px 0 8px; color: #d63384; border-left: 4px solid #d63384; padding-left: 8px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        select, input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; box-sizing: border-box; }
+        .child-row { display: flex; gap: 10px; margin-bottom: 8px; background: #fdfdfd; padding: 8px; border-radius: 6px; border: 1px solid #eee; }
+        .opt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 0.85rem; }
+        .opt-row select { width: 80px; }
+
+        /* 領収書デザイン */
+        .receipt-page { background: white; width: 100%; box-sizing: border-box; padding: 40px 30px; min-height: 620px; color: black; line-height: 1.4; position: relative; }
+        .receipt-header { text-align: center; margin-bottom: 20px; }
+        .receipt-title { font-size: 20px; font-weight: bold; border-bottom: 1px solid black; display: inline-block; padding: 0 20px; margin-bottom: 10px; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+        .receipt-table th { border-bottom: 2px solid black; text-align: left; padding: 8px 5px; background: #f9f9f9; }
+        .receipt-table td { border-bottom: 1px solid #eee; padding: 8px 5px; vertical-align: top; }
+        .total-box { text-align: center; margin: 20px 0; font-size: 24px; font-weight: bold; border-bottom: 3px double black; padding-bottom: 5px; }
+        .footer-info { margin-top: 30px; font-size: 10px; line-height: 1.6; }
+
+        /* ボタンエリア */
+        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-print { flex: 3; padding: 18px; background: #d63384; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1.2rem; }
+        .btn-reset { flex: 1; padding: 18px; background: #6c757d; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1.1rem; }
+        .btn-print:hover { background: #b0246b; }
+        .btn-reset:hover { background: #5a6268; }
+        
+        @media print {
+            body { background: white; padding: 0; margin: 0; }
+            .no-print { display: none !important; }
+            .wrapper { display: block; }
+            .preview-panel { width: 100%; background: none; padding: 0; position: static; }
+            .receipt-page { border: none; width: 148mm; height: 210mm; margin: 0 auto; padding: 10mm; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <div class="input-panel no-print">
+        <h1>キッズ花花 料金計算</h1>
+        
+        <form id="calcForm">
+            <div class="section-title">適用区分</div>
+            <select id="priceTable" onchange="calculate()">
+                <option value="member">会員・インターネット予約</option>
+                <option value="visitor">ビジター：一時預かり料金</option>
+            </select>
+
+            <div class="grid">
+                <div>
+                    <div class="section-title">利用日時</div>
+                    <label style="font-size: 11px;">入室日時</label>
+                    <input type="datetime-local" id="startTime" onchange="calculate()">
+                    <label style="font-size: 11px;">退室日時</label>
+                    <input type="datetime-local" id="endTime" onchange="calculate()">
+                </div>
+                <div>
+                    <div class="section-title">お子様設定</div>
+                    <div id="childrenContainer"></div>
+                </div>
+            </div>
+
+            <div class="grid" style="margin-top:10px;">
+                <div class="box">
+                    <div class="section-title">食事・シャワー (回数)</div>
+                    <div id="optionsContainer"></div>
+                </div>
+                <div class="box">
+                    <div class="section-title">特別調整</div>
+                    <div class="opt-row"><span>ビジター利用料 (¥1000)</span><select id="visitorRegQty" onchange="calculate()"></select></div>
+                    <div style="margin-top:20px;">
+                        <label style="font-weight:bold; color:#d63384; cursor:pointer;">
+                            <input type="checkbox" id="isRepeater" onchange="calculate()" style="width:auto;"> リピーター割引 (10%OFF)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn-print" type="button" onclick="window.print()">領収書を印刷</button>
+                <button class="btn-reset" type="button" onclick="resetSystem()">リセット</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="preview-panel">
+        <div class="receipt-page">
+            <div class="receipt-header">
+                <div class="receipt-title">領収書兼ご精算書</div>
+                <div id="p-date" style="text-align: right; font-size: 11px; margin-top: 5px;"></div>
+            </div>
+            
+            <div id="p-receipt-message" style="font-size: 12px; line-height: 1.6; margin-bottom: 10px;"></div>
+            
+            <div class="total-box">
+                合計金額 <span id="p-total">¥ 0 -</span>
+            </div>
+
+            <table class="receipt-table">
+                <thead>
+                    <tr><th style="width:40%">項目</th><th style="width:25%">詳細</th><th style="width:35%; text-align:right;">金額(内訳)</th></tr>
+                </thead>
+                <tbody id="p-breakdown"></tbody>
+            </table>
+
+            <div class="footer-info">
+                東京都中央区銀座7-15-18 銀ビル1階<br>
+                TEL: 03-4400-2291<br>
+                キッズ花花（株式会社mommy daddy）
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 料金データ
+const RATES = {
+    member: {
+        under1: { base: [7700, 8700, 9700, 10700, 11700, 12700, 13700, 14700, 15700, 16550, 17400, 18250, 19100], hourly: 1700 },
+        under2: { base: [5500, 6500, 7500, 8500, 9500, 10500, 11500, 12500, 13500, 14250, 15000, 15750, 16500], hourly: 1500 },
+        over2:  { base: [4400, 5400, 6400, 7400, 8400, 9400, 10400, 11400, 12400, 13100, 13800, 14500, 15200], hourly: 1400 }
+    },
+    visitor: {
+        under1: { base: [11000, 12700, 14300, 16000, 17600, 19300, 20900, 22600, 24200, 25100, 26100, 26950, 27900], hourly: 1800 },
+        under2: { base: [9400, 10600, 11800, 13000, 14200, 15400, 16600, 17800, 19000, 19700, 20700, 21350, 22300], hourly: 1600 },
+        over2:  { base: [7700, 8700, 9700, 10700, 11700, 12700, 13700, 14600, 15600, 16300, 17100, 17800, 18600], hourly: 1500 }
+    }
+};
+
+// 祝日・施設特別休日リスト
+const HOLIDAY_LIST = [
+    "2026-01-01","2026-01-12","2026-02-11","2026-02-23","2026-03-21","2026-04-29","2026-05-03","2026-05-04","2026-05-05","2026-05-06","2026-07-20","2026-08-11","2026-09-21","2026-09-22","2026-09-23","2026-10-12","2026-11-03","2026-11-23",
+    "2027-01-01","2027-01-11","2027-02-11","2027-02-23","2027-03-21","2027-03-22","2027-04-29","2027-05-03","2027-05-04","2027-05-05","2027-06-05","2027-07-19","2027-08-11","2027-09-20","2027-09-23","2027-10-11","2027-11-03","2027-11-23",
+    "2026-04-30","2026-05-01","2026-05-02","2026-08-12","2026-08-13","2026-08-14","2026-08-15","2026-12-28","2026-12-29","2026-12-30","2026-12-31","2027-01-02","2027-01-03"
+];
+
+function init() {
+    const cCont = document.getElementById('childrenContainer');
+    cCont.innerHTML = "";
+    for(let i=1; i<=5; i++) {
+        cCont.innerHTML += `<div class="child-row">
+            <select class="child-active" onchange="calculate()"><option value="0">未利用</option><option value="1" ${i==1?'selected':''}>${i}人目</option></select>
+            <select class="child-age" onchange="calculate()"><option value="under1">43日〜1歳未満</option><option value="under2">1歳〜2歳未満</option><option value="over2" ${i==1?'selected':''}>2歳以上</option></select>
+        </div>`;
+    }
+    
+    const oCont = document.getElementById('optionsContainer');
+    oCont.innerHTML = "";
+    const opts = [
+        {n:"朝食", p:400}, {n:"昼食", p:600}, {n:"夕食", p:600}, 
+        {n:"離乳食", p:200}, {n:"おやつ", p:100}, {n:"白米", p:50},
+        {n:"おむつ", p:100}, {n:"シャワー", p:500}
+    ];
+    opts.forEach(o => {
+        let html = `<div class="opt-row"><span>${o.n} (¥${o.p})</span><select class="opt-qty" data-price="${o.p}" data-name="${o.n}" onchange="calculate()">`;
+        for(let j=0; j<=10; j++) html += `<option value="${j}">${j}</option>`;
+        oCont.innerHTML += html + `</select></div>`;
+    });
+    
+    document.getElementById('visitorRegQty').innerHTML = "";
+    for(let j=0; j<=10; j++) document.getElementById('visitorRegQty').innerHTML += `<option value="${j}">${j}</option>`;
+
+    const boxDiv = document.querySelector('.box:last-child');
+    if (!document.getElementById('otherDiscount')) {
+        const discRow = document.createElement('div');
+        discRow.className = 'opt-row';
+        discRow.style.marginTop = "10px";
+        discRow.innerHTML = `<span>その他の割引</span><select id="otherDiscount" onchange="calculate()"></select>`;
+        boxDiv.insertBefore(discRow, boxDiv.lastElementChild);
+        
+        const otherDiscSelect = document.getElementById('otherDiscount');
+        for(let i=0; i<=5000; i+=100) {
+            otherDiscSelect.innerHTML += `<option value="${i}">¥${i}</option>`;
+        }
+    }
+
+    setDefaultDates();
+    calculate();
+}
+
+function setDefaultDates() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const isoStr = now.toISOString().slice(0, 16);
+    document.getElementById('startTime').value = isoStr;
+    document.getElementById('endTime').value = isoStr;
+}
+
+function resetSystem() {
+    document.getElementById('calcForm').reset();
+    setDefaultDates();
+    const actives = document.querySelectorAll('.child-active');
+    actives.forEach((s, idx) => s.value = (idx === 0 ? "1" : "0"));
+    const ages = document.querySelectorAll('.child-age');
+    ages.forEach((s, idx) => s.value = (idx === 0 ? "over2" : "under1"));
+    calculate();
+}
+
+function getAdjSlots(totalMinutes) {
+    if (totalMinutes <= 0) return 0;
+    return Math.floor((totalMinutes + 15) / 30);
+}
+
+// ご指定のフォーマット「〇年〇月〇日〇時〇分」に整形する関数
+function formatJapaneseDate(dt) {
+    const y = dt.getFullYear();
+    const m = dt.getMonth() + 1;
+    const d = dt.getDate();
+    const hr = dt.getHours();
+    const min = dt.getMinutes();
+    return `${y}年${m}月${d}日 ${hr}時${min}分`; // 見やすさのため「日」と「時」の間のみ半角スペース
+}
+
+function calculate() {
+    const start = new Date(document.getElementById('startTime').value);
+    const end = new Date(document.getElementById('endTime').value);
+    
+    if(end <= start) {
+        document.getElementById('p-total').innerText = "¥ 0 -";
+        document.getElementById('p-breakdown').innerHTML = "";
+        if(document.getElementById('p-receipt-message')) document.getElementById('p-receipt-message').innerHTML = "";
+        return;
+    }
+
+    const totalDiffMin = (end - start) / 60000;
+    const totalSlots = getAdjSlots(totalDiffMin);
+    let items = [];
+    let childCount = 0;
+
+    document.querySelectorAll('.child-row').forEach((row, idx) => {
+        if(row.querySelector('.child-active').value == "1") {
+            childCount++;
+            const age = row.querySelector('.child-age').value;
+            const table = RATES[document.getElementById('priceTable').value][age];
+            let fee = (totalSlots <= 16) ? ((totalSlots <= 4) ? table.base[0] : table.base[totalSlots-4]) : table.base[12] + ((totalSlots - 16) * (table.hourly / 2));
+            items.push({name: `${idx+1}人目利用料`, detail: `${(totalSlots*30/60).toFixed(1)}H`, price: fee, note: `基本料金` });
+        }
+    });
+
+    let satMin = 0, holMin = 0, nightMin = 0;
+    let tempCursor = new Date(start);
+    while (tempCursor < end) {
+        const h = tempCursor.getHours(), d = tempCursor.getDay(), dateStr = tempCursor.toLocaleDateString('sv-SE');
+        const isHoliday = (d === 0 || HOLIDAY_LIST.includes(dateStr));
+        const isSaturday = (d === 6 && !isHoliday);
+        if (isHoliday) holMin++; else if (isSaturday) satMin++;
+        if (h >= 22 || h < 7) nightMin++;
+        tempCursor.setMinutes(tempCursor.getMinutes() + 1);
+    }
+
+    const sSlots = getAdjSlots(satMin), hSlots = getAdjSlots(holMin), nSlots = getAdjSlots(nightMin);
+    if(sSlots > 0) items.push({name: "土曜加算", detail: `${(sSlots*30/60).toFixed(1)}H`, price: sSlots * 100 * childCount, note: `¥200/H × ${childCount}名` });
+    if(hSlots > 0) items.push({name: "休日加算", detail: `${(hSlots*30/60).toFixed(1)}H`, price: hSlots * 250 * childCount, note: `¥500/H × ${childCount}名` });
+    if(nSlots > 0) items.push({name: "深夜加算", detail: `${(nSlots*30/60).toFixed(1)}H`, price: nSlots * 250 * childCount, note: `¥500/H × ${childCount}名` });
+
+    document.querySelectorAll('.opt-qty').forEach(s => {
+        let q = parseInt(s.value);
+        if(q > 0) items.push({name: s.dataset.name, detail: `${q}回`, price: q * parseInt(s.dataset.price), note: `¥${s.dataset.price} × ${q}` });
+    });
+
+    let vQty = parseInt(document.getElementById('visitorRegQty').value);
+    if(vQty > 0) items.push({name: "ビジター利用料", detail: `${vQty}名`, price: vQty * 1000, note: `¥1,000 × ${vQty}` });
+
+    let subtotal = items.reduce((sum, it) => sum + it.price, 0);
+
+    let otherDisc = parseInt(document.getElementById('otherDiscount')?.value || 0);
+    if(otherDisc > 0) {
+        items.push({name: "その他の割引", detail: "調整", price: -otherDisc, note: `手動値引き` });
+        subtotal -= otherDisc;
+    }
+
+    if(document.getElementById('isRepeater').checked) {
+        let disc = Math.floor(subtotal * 0.1);
+        items.push({name: "リピーター割引", detail: "-10%", price: -disc, note: `割引後総計の10%引` });
+        subtotal -= disc;
+    }
+
+    // --- 画面出力（ご指定の順番・フォーマットに統一） ---
+    if(document.getElementById('p-receipt-message')) {
+        document.getElementById('p-receipt-message').innerHTML = `
+            <div>この度はキッズ花花をご利用いただき、誠にありがとうございます。下記内容にて、正に領収いたしました。</div>
+            <div style="margin-top: 12px;">ご利用期間　${formatJapaneseDate(start)}から${formatJapaneseDate(end)}まで</div>
+        `;
+    }
+
+    // 合計金額の出力
+    document.getElementById('p-total').innerText = `¥ ${Math.max(0, subtotal).toLocaleString()} -`;
+    
+    // 日付の出力
+    document.getElementById('p-date').innerText = `日付: ${document.getElementById('endTime').value.split('T')[0]}`;
+    
+    let html = "";
+    items.forEach(it => { html += `<tr><td>${it.name}</td><td>${it.detail}</td><td style="text-align:right;">¥${it.price.toLocaleString()}<br><span style="font-size:9px; color:#666;">(${it.note})</span></td></tr>`; });
+    document.getElementById('p-breakdown').innerHTML = html;
+}
+init();
+</script>
+</body>
+</html>
